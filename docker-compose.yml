@@ -1,20 +1,4 @@
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: rw_postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./db/migrations:/migrations:ro
-    ports:
-      - "5432:5432"
-    networks:
-      - email_net
-
   portal:
     build:
       context: ./portal
@@ -28,16 +12,16 @@ services:
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       N8N_BASE_URL: ${N8N_BASE_URL}
-    ports:
-      - "3000:3000"
-    depends_on:
-      - postgres
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.portal.rule=Host(`emailcheck.ushuaialang.com`)"
+      - "traefik.http.routers.portal.entrypoints=websecure"
+      - "traefik.http.routers.portal.tls=true"
+      - "traefik.http.routers.portal.tls.certresolver=myresolver"
+      - "traefik.http.services.portal.loadbalancer.server.port=3000"
     networks:
-      - email_net
-
-volumes:
-  postgres_data:
+      - web-proxy
 
 networks:
-  email_net:
-    driver: bridge
+  web-proxy:
+    external: true

@@ -13,7 +13,7 @@ services:
     ports:
       - "5432:5432"
     networks:
-      - rw_net
+      - email_net
 
   portal:
     build:
@@ -33,11 +33,11 @@ services:
     depends_on:
       - postgres
     networks:
-      - rw_net
+      - email_net
 
 volumes:
   postgres_data:
 
 networks:
-  rw_net:
+  email_net:
     driver: bridge

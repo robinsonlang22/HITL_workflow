@@ -1,0 +1,196 @@
+{
+  "name": "Email HITL Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": { "item": [{ "mode": "everyMinute" }] },
+        "filters": { "readStatus": "unread" },
+        "options": { "downloadAttachments": false }
+      },
+      "id": "a1b2c3d4-0001-0001-0001-000000000001",
+      "name": "Gmail Trigger",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "credentials": { "gmailOAuth2": { "id": "REPLACE_WITH_YOUR_GMAIL_CREDENTIAL_ID", "name": "Gmail account" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Read brand voice system prompt from env or hardcode here\nconst systemPrompt = `You are a professional customer support agent.\nYou MUST return a valid JSON object only:\n{\n  \"draft\": \"<reply text>\",\n  \"confidence\": <0.0-1.0>,\n  \"flags\": [\"pricing\"|\"refund\"|\"delivery_promise\"|\"legal_claim\"|\"medical\"|\"out_of_scope\"]\n}\nTone: polite, clear, formal. Never promise delivery dates, never guarantee refunds.\nConfidence: start at 1.0, subtract 0.20 for pricing/refund, 0.15 for deadlines/legal/medical, 0.10 for out-of-scope.`;\n\nconst email = $input.first().json;\nreturn [{\n  json: {\n    gmail_id: email.id,\n    from_address: email.from,\n    subject: email.subject,\n    incoming_body: email.text || email.snippet || '',\n    system_prompt: systemPrompt,\n    user_message: `Customer email from: ${email.from}\\nSubject: ${email.subject}\\n\\n${email.text || email.snippet}`\n  }\n}];"
+      },
+      "id": "a1b2c3d4-0002-0002-0002-000000000002",
+      "name": "Build Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.moonshot.cn/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.MOONSHOT_API_KEY }}" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={\n  \"model\": \"moonshot-v2-5\",\n  \"max_tokens\": 1024,\n  \"messages\": [{\"role\": \"system\", \"content\": \"{{ $json.system_prompt }}\"}, {\"role\": \"user\", \"content\": \"{{ $json.user_message }}\"}]\n}"
+      },
+      "id": "a1b2c3d4-0003-0003-0003-000000000003",
+      "name": "Call Moonshot API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const prev = $input.first().json;\nconst rawText = prev.choices?.[0]?.message?.content ?? '';\n\nlet parsed;\ntry {\n  // Claude may wrap JSON in code fences — strip them\n  const cleaned = rawText.replace(/```json\\s*/g, '').replace(/```\\s*/g, '').trim();\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  // Fallback: treat entire text as draft with low confidence\n  parsed = { draft: rawText, confidence: 0.3, flags: ['parse_error'] };\n}\n\n// Carry forward context from Build Prompt node\nconst ctx = $node['Build Prompt'].json;\n\nreturn [{\n  json: {\n    gmail_id: ctx.gmail_id,\n    from_address: ctx.from_address,\n    subject: ctx.subject,\n    incoming_body: ctx.incoming_body,\n    ai_draft: parsed.draft,\n    confidence: parsed.confidence,\n    flags: parsed.flags ?? [],\n    resume_url: $execution.resumeUrl\n  }\n}];"
+      },
+      "id": "a1b2c3d4-0004-0004-0004-000000000004",
+      "name": "Parse Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.confidence }}",
+              "rightValue": "={{ $env.CONFIDENCE_THRESHOLD ?? 0.75 }}",
+              "operator": { "type": "number", "operation": "gte" }
+            }
+          ]
+        }
+      },
+      "id": "a1b2c3d4-0005-0005-0005-000000000005",
+      "name": "Confidence Gate",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.from_address }}",
+        "subject": "=Re: {{ $json.subject }}",
+        "emailType": "text",
+        "message": "={{ $json.ai_draft }}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0006-0006-0006-000000000006",
+      "name": "Send Direct (high confidence)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [1340, 160],
+      "credentials": { "gmailOAuth2": { "id": "REPLACE_WITH_YOUR_GMAIL_CREDENTIAL_ID", "name": "Gmail account" } }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://localhost:3000/api/jobs",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "gmail_id": "={{ $json.gmail_id }}",
+          "from_address": "={{ $json.from_address }}",
+          "subject": "={{ $json.subject }}",
+          "incoming_body": "={{ $json.incoming_body }}",
+          "ai_draft": "={{ $json.ai_draft }}",
+          "confidence": "={{ $json.confidence }}",
+          "flags": "={{ $json.flags }}",
+          "resume_url": "={{ $json.resume_url }}"
+        }
+      },
+      "id": "a1b2c3d4-0007-0007-0007-000000000007",
+      "name": "Save Job to Portal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1340, 440]
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0008-0008-0008-000000000008",
+      "name": "Wait for Review",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1560, 440],
+      "webhookId": "REPLACE_WITH_UNIQUE_ID"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Read decision posted by the portal to the resume webhook\nconst body = $input.first().json.body ?? $input.first().json;\nconst ctx = $node['Parse Response'].json;\n\nreturn [{\n  json: {\n    approved: body.approved === true,\n    final_text: body.final_text || ctx.ai_draft,\n    from_address: ctx.from_address,\n    subject: ctx.subject\n  }\n}];"
+      },
+      "id": "a1b2c3d4-0009-0009-0009-000000000009",
+      "name": "Read Decision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 440]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json.approved }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equals" }
+            }
+          ]
+        }
+      },
+      "id": "a1b2c3d4-0010-0010-0010-000000000010",
+      "name": "Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2000, 440]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.from_address }}",
+        "subject": "=Re: {{ $json.subject }}",
+        "emailType": "text",
+        "message": "={{ $json.final_text }}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0011-0011-0011-000000000011",
+      "name": "Send Approved Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [2220, 360],
+      "credentials": { "gmailOAuth2": { "id": "REPLACE_WITH_YOUR_GMAIL_CREDENTIAL_ID", "name": "Gmail account" } }
+    }
+  ],
+  "connections": {
+    "Gmail Trigger": { "main": [[{ "node": "Build Prompt", "type": "main", "index": 0 }]] },
+    "Build Prompt": { "main": [[{ "node": "Call Claude API", "type": "main", "index": 0 }]] },
+    "Call Claude API": { "main": [[{ "node": "Parse Response", "type": "main", "index": 0 }]] },
+    "Parse Response": { "main": [[{ "node": "Confidence Gate", "type": "main", "index": 0 }]] },
+    "Confidence Gate": {
+      "main": [
+        [{ "node": "Send Direct (high confidence)", "type": "main", "index": 0 }],
+        [{ "node": "Save Job to Portal", "type": "main", "index": 0 }]
+      ]
+    },
+    "Save Job to Portal": { "main": [[{ "node": "Wait for Review", "type": "main", "index": 0 }]] },
+    "Wait for Review": { "main": [[{ "node": "Read Decision", "type": "main", "index": 0 }]] },
+    "Read Decision": { "main": [[{ "node": "Approved?", "type": "main", "index": 0 }]] },
+    "Approved?": {
+      "main": [
+        [{ "node": "Send Approved Email", "type": "main", "index": 0 }],
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "meta": { "instanceId": "REPLACE_WITH_YOUR_N8N_INSTANCE_ID" }
+}

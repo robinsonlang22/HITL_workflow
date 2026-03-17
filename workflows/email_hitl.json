@@ -3,77 +3,99 @@
   "nodes": [
     {
       "parameters": {
-        "pollTimes": { "item": [{ "mode": "everyMinute" }] },
-        "filters": { "readStatus": "unread" },
-        "options": { "downloadAttachments": false }
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "filters": {
+          "readStatus": "both",
+          "sender": "=Lang Jiacheng"
+        }
       },
-      "id": "a1b2c3d4-0001-0001-0001-000000000001",
+      "id": "a047ef49-49e9-4036-abbf-6ce0d0146821",
       "name": "Gmail Trigger",
       "type": "n8n-nodes-base.gmailTrigger",
       "typeVersion": 1,
-      "position": [240, 300],
-      "credentials": { "gmailOAuth2": { "id": "REPLACE_WITH_YOUR_GMAIL_CREDENTIAL_ID", "name": "Gmail account" } }
+      "position": [
+        -1408,
+        400
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "hkwFEUPE5HcIHCcl",
+          "name": "Gmail account"
+        }
+      }
     },
     {
       "parameters": {
-        "jsCode": "// Read brand voice system prompt from env or hardcode here\nconst systemPrompt = `You are a professional customer support agent.\nYou MUST return a valid JSON object only:\n{\n  \"draft\": \"<reply text>\",\n  \"confidence\": <0.0-1.0>,\n  \"flags\": [\"pricing\"|\"refund\"|\"delivery_promise\"|\"legal_claim\"|\"medical\"|\"out_of_scope\"]\n}\nTone: polite, clear, formal. Never promise delivery dates, never guarantee refunds.\nConfidence: start at 1.0, subtract 0.20 for pricing/refund, 0.15 for deadlines/legal/medical, 0.10 for out-of-scope.`;\n\nconst email = $input.first().json;\nreturn [{\n  json: {\n    gmail_id: email.id,\n    from_address: email.from,\n    subject: email.subject,\n    incoming_body: email.text || email.snippet || '',\n    system_prompt: systemPrompt,\n    user_message: `Customer email from: ${email.from}\\nSubject: ${email.subject}\\n\\n${email.text || email.snippet}`\n  }\n}];"
+        "jsCode": "// Read brand voice system prompt from env or hardcode here\nconst systemPrompt = `You are a professional customer support agent.\nYou MUST return a valid JSON object only:\n{\n  \"draft\": \"<reply text>\",\n  \"confidence\": <0.0-1.0>,\n  \"flags\": [\"pricing\"|\"refund\"|\"delivery_promise\"|\"legal_claim\"|\"medical\"|\"out_of_scope\"]\n}\nTone: polite, clear, formal. Never promise delivery dates, never guarantee refunds.\nConfidence: start at 1.0, subtract 0.20 for pricing/refund, 0.15 for deadlines/legal/medical, 0.10 for out-of-scope.`;\n\nconst email = $input.first().json;\nreturn [{\n  json: {\n    gmail_id: email.id,\n    from_address: email.From,\n    subject: email.Subject,\n    incoming_body: email.text || email.snippet || '',\n    system_prompt: systemPrompt,\n    user_message: `Customer email from: ${email.from}\\nSubject: ${email.subject}\\n\\n${email.text || email.snippet}`\n  }\n}];"
       },
-      "id": "a1b2c3d4-0002-0002-0002-000000000002",
+      "id": "681e5881-d10e-4519-84bc-c47f276091eb",
       "name": "Build Prompt",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [460, 300]
+      "position": [
+        -1184,
+        400
+      ]
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "https://api.moonshot.cn/v1/chat/completions",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "Authorization", "value": "=Bearer {{ $env.MOONSHOT_API_KEY }}" },
-            { "name": "content-type", "value": "application/json" }
-          ]
-        },
-        "sendBody": true,
-        "contentType": "raw",
-        "rawContentType": "application/json",
-        "body": "={\n  \"model\": \"moonshot-v2-5\",\n  \"max_tokens\": 1024,\n  \"messages\": [{\"role\": \"system\", \"content\": \"{{ $json.system_prompt }}\"}, {\"role\": \"user\", \"content\": \"{{ $json.user_message }}\"}]\n}"
+        "jsCode": "const prev = $input.first().json;\n\n// Support Gemini, Moonshot/OpenAI response shapes\nconst rawText = prev.content?.parts?.[0]?.text          // Gemini\n  || prev.choices?.[0]?.message?.content                 // OpenAI/Moonshot\n  || prev.text\n  || '';\n\nlet parsed;\ntry {\n  const cleaned = rawText.replace(/```json\\s*/g, '').replace(/```\\s*/g, '').trim();\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  parsed = { draft: rawText, confidence: 0.3, flags: ['parse_error'] };\n}\n\nconst ctx = $node['Build Prompt'].json;\n\nreturn [{\n  json: {\n    gmail_id: ctx.gmail_id,\n    from_address: ctx.from_address,\n    subject: ctx.subject,\n    incoming_body: ctx.incoming_body,\n    ai_draft: parsed.draft,\n    confidence: parsed.confidence,\n    flags: parsed.flags ?? [],\n    resume_url: $execution.resumeUrl\n  }\n}];\n"
       },
-      "id": "a1b2c3d4-0003-0003-0003-000000000003",
-      "name": "Call Moonshot API",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
-      "position": [680, 300]
-    },
-    {
-      "parameters": {
-        "jsCode": "const prev = $input.first().json;\nconst rawText = prev.choices?.[0]?.message?.content ?? '';\n\nlet parsed;\ntry {\n  // Claude may wrap JSON in code fences — strip them\n  const cleaned = rawText.replace(/```json\\s*/g, '').replace(/```\\s*/g, '').trim();\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  // Fallback: treat entire text as draft with low confidence\n  parsed = { draft: rawText, confidence: 0.3, flags: ['parse_error'] };\n}\n\n// Carry forward context from Build Prompt node\nconst ctx = $node['Build Prompt'].json;\n\nreturn [{\n  json: {\n    gmail_id: ctx.gmail_id,\n    from_address: ctx.from_address,\n    subject: ctx.subject,\n    incoming_body: ctx.incoming_body,\n    ai_draft: parsed.draft,\n    confidence: parsed.confidence,\n    flags: parsed.flags ?? [],\n    resume_url: $execution.resumeUrl\n  }\n}];"
-      },
-      "id": "a1b2c3d4-0004-0004-0004-000000000004",
+      "id": "b23e5296-21a1-469c-989f-b6d73de6f82b",
       "name": "Parse Response",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [900, 300]
+      "position": [
+        -608,
+        400
+      ]
     },
     {
       "parameters": {
-        "conditions": {
-          "options": { "caseSensitive": true },
-          "conditions": [
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "messages": {
+          "values": [
             {
-              "leftValue": "={{ $json.confidence }}",
-              "rightValue": "={{ $env.CONFIDENCE_THRESHOLD ?? 0.75 }}",
-              "operator": { "type": "number", "operation": "gte" }
+              "content": "={{ $json.system_prompt }}",
+              "role": "model"
+            },
+            {
+              "content": "={{ $json.incoming_body }}"
+            },
+            {
+              "content": "={{ $json.user_message }}"
             }
           ]
-        }
+        },
+        "jsonOutput": true,
+        "builtInTools": {},
+        "options": {}
       },
-      "id": "a1b2c3d4-0005-0005-0005-000000000005",
-      "name": "Confidence Gate",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [1120, 300]
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        -960,
+        400
+      ],
+      "id": "432d62d8-43f6-4f8c-b704-d411085a5de5",
+      "name": "Message a model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "mKudFxkerhF1GLD1",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
     },
     {
       "parameters": {
@@ -83,114 +105,376 @@
         "message": "={{ $json.ai_draft }}",
         "options": {}
       },
-      "id": "a1b2c3d4-0006-0006-0006-000000000006",
-      "name": "Send Direct (high confidence)",
+      "id": "cdb08195-c644-44ad-a854-e6d78422d80c",
+      "name": "Send Direct",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2,
-      "position": [1340, 160],
-      "credentials": { "gmailOAuth2": { "id": "REPLACE_WITH_YOUR_GMAIL_CREDENTIAL_ID", "name": "Gmail account" } }
+      "position": [
+        -160,
+        304
+      ],
+      "webhookId": "05e007c5-60c4-4d84-91e6-30cb72513a6d",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "hkwFEUPE5HcIHCcl",
+          "name": "Gmail account"
+        }
+      }
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "=https://emailcheck.ushuaialang.com/api/jobs",
-        "sendBody": true,
-        "contentType": "json",
-        "body": {
-          "gmail_id": "={{ $json.gmail_id }}",
-          "from_address": "={{ $json.from_address }}",
-          "subject": "={{ $json.subject }}",
-          "incoming_body": "={{ $json.incoming_body }}",
-          "ai_draft": "={{ $json.ai_draft }}",
-          "confidence": "={{ $json.confidence }}",
-          "flags": "={{ $json.flags }}",
-          "resume_url": "={{ $json.resume_url }}"
+        "operation": "executeQuery",
+        "query": "INSERT INTO jobs (gmail_id, from_address, subject, incoming_body, ai_draft, confidence, flags, resume_url, status) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, 'pending') ON CONFLICT (gmail_id) DO UPDATE SET ai_draft=$5, confidence=$6, resume_url=$8, status='pending' RETURNING id",
+        "options": {
+          "queryReplacement": "={{ [ $json.gmail_id, $json.from_address, $json.subject, $json.incoming_body, $json.ai_draft, $json.confidence, JSON.stringify($json.flags), $json.resume_url ] }}"
         }
       },
-      "id": "a1b2c3d4-0007-0007-0007-000000000007",
-      "name": "Save Job to Portal",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
-      "position": [1340, 440]
+      "id": "65e0bf3e-2156-4493-960e-1eb86a9b7d70",
+      "name": "Save Job to DB",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        -160,
+        496
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "mVeIKj8qQW8QElJp",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $node['Parse Response'].json;\nconst dbRow = $input.first().json;\n\nreturn [{\n  json: {\n    job_id: dbRow.id,\n    payload: {\n      // chat_id: $env.TELEGRAM_CHAT_ID,\n      text: `📧 <b>Review Required</b>\\n\\n<b>From:</b> ${ctx.from_address}\\n<b>Subject:</b> ${ctx.subject}\\n<b>Confidence:</b> ${ctx.confidence}\\n<b>Flags:</b> ${ctx.flags.join(', ') || 'none'}\\n\\n<b>Draft:</b>\\n${ctx.ai_draft}`,\n      parse_mode: 'HTML',\n      reply_markup: {\n        inline_keyboard: [[\n          { text: '✅ Approve', url: $execution.resumeUrl + '?decision=approve' },\n          { text: '❌ Reject', url: $execution.resumeUrl + '?decision=reject' }\n        ]]\n      }\n    }\n  }\n}];"
+      },
+      "id": "e757a043-8559-4f44-b2bb-f66d669ff890",
+      "name": "Build Telegram Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        64,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO corrections (job_id, prompt, response, label, operator_email) SELECT id, $2, $3, $4, 'telegram-operator' FROM jobs WHERE gmail_id = $1",
+        "options": {
+          "queryReplacement": "={{ [ $json.gmail_id, $json.incoming_body, $json.ai_draft, $json.approved ] }}"
+        }
+      },
+      "id": "d6e04db4-6676-4161-bb54-4accfb185b42",
+      "name": "Log Correction",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        960,
+        496
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "mVeIKj8qQW8QElJp",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "6410670769",
+        "text": "={{ JSON.stringify($json.payload) }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        288,
+        496
+      ],
+      "id": "0b7f17b5-8639-4c74-9c60-6fa2b9feddce",
+      "name": "Send a text message",
+      "webhookId": "2e2ae5bc-fe0c-4872-8589-7cfb7ea313ff",
+      "credentials": {
+        "telegramApi": {
+          "id": "7hRPMiKyIc9vTEET",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const webhookData = $input.first().json;\nconst decision = webhookData.query?.decision || 'reject';\nconst ctx = $node['Parse Response'].json;\n\nreturn [{\n  json: {\n    approved: decision === 'approve',\n    decision: decision,\n    from_address: ctx.from_address,\n    subject: ctx.subject,\n    ai_draft: ctx.ai_draft,\n    gmail_id: ctx.gmail_id,\n    incoming_body: ctx.incoming_body\n  }\n}];"
+      },
+      "id": "ab38a382-151e-44eb-9c86-df3b9fea5c47",
+      "name": "Read Decision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        736,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $node['Read Decision'].json.from_address }}",
+        "subject": "={{ $node['Read Decision'].json.subject }}",
+        "emailType": "text",
+        "message": "={{ $node['Read Decision'].json.ai_draft }}",
+        "options": {}
+      },
+      "id": "4082db4b-684c-4a5c-9d7f-356730f5c878",
+      "name": "Send Approved Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [
+        1408,
+        496
+      ],
+      "webhookId": "ad4fae66-6ea0-4a29-a4bc-f8e4410b747e",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "hkwFEUPE5HcIHCcl",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.confidence }}",
+              "rightValue": 0.75,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              },
+              "id": "e0782780-4d75-4a26-863d-f6943bf45a47"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "5165b78a-08ed-4643-90ec-f32493597b65",
+      "name": "Confidence Gate",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -384,
+        400
+      ]
     },
     {
       "parameters": {
         "resume": "webhook",
         "options": {}
       },
-      "id": "a1b2c3d4-0008-0008-0008-000000000008",
+      "id": "4de696ac-6ffb-4754-96cd-d861604f6c3f",
       "name": "Wait for Review",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1,
-      "position": [1560, 440],
+      "position": [
+        512,
+        496
+      ],
       "webhookId": "REPLACE_WITH_UNIQUE_ID"
     },
     {
       "parameters": {
-        "jsCode": "// Read decision posted by the portal to the resume webhook\nconst body = $input.first().json.body ?? $input.first().json;\nconst ctx = $node['Parse Response'].json;\n\nreturn [{\n  json: {\n    approved: body.approved === true,\n    final_text: body.final_text || ctx.ai_draft,\n    from_address: ctx.from_address,\n    subject: ctx.subject\n  }\n}];"
-      },
-      "id": "a1b2c3d4-0009-0009-0009-000000000009",
-      "name": "Read Decision",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1780, 440]
-    },
-    {
-      "parameters": {
         "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
           "conditions": [
             {
-              "leftValue": "={{ $json.approved }}",
-              "rightValue": true,
-              "operator": { "type": "boolean", "operation": "equals" }
+              "leftValue": "={{ $json.success }}",
+              "rightValue": "={{ true }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              },
+              "id": "879aa227-1f63-4215-8a10-fb1527f2c581"
             }
-          ]
-        }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       },
-      "id": "a1b2c3d4-0010-0010-0010-000000000010",
+      "id": "8052b4e7-f75a-4eb2-8f87-b0037ab5d38c",
       "name": "Approved?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [2000, 440]
-    },
-    {
-      "parameters": {
-        "sendTo": "={{ $json.from_address }}",
-        "subject": "=Re: {{ $json.subject }}",
-        "emailType": "text",
-        "message": "={{ $json.final_text }}",
-        "options": {}
-      },
-      "id": "a1b2c3d4-0011-0011-0011-000000000011",
-      "name": "Send Approved Email",
-      "type": "n8n-nodes-base.gmail",
-      "typeVersion": 2,
-      "position": [2220, 360],
-      "credentials": { "gmailOAuth2": { "id": "REPLACE_WITH_YOUR_GMAIL_CREDENTIAL_ID", "name": "Gmail account" } }
+      "position": [
+        1184,
+        496
+      ]
     }
   ],
+  "pinData": {},
   "connections": {
-    "Gmail Trigger": { "main": [[{ "node": "Build Prompt", "type": "main", "index": 0 }]] },
-    "Build Prompt": { "main": [[{ "node": "Call Claude API", "type": "main", "index": 0 }]] },
-    "Call Claude API": { "main": [[{ "node": "Parse Response", "type": "main", "index": 0 }]] },
-    "Parse Response": { "main": [[{ "node": "Confidence Gate", "type": "main", "index": 0 }]] },
-    "Confidence Gate": {
+    "Gmail Trigger": {
       "main": [
-        [{ "node": "Send Direct (high confidence)", "type": "main", "index": 0 }],
-        [{ "node": "Save Job to Portal", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Build Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Save Job to Portal": { "main": [[{ "node": "Wait for Review", "type": "main", "index": 0 }]] },
-    "Wait for Review": { "main": [[{ "node": "Read Decision", "type": "main", "index": 0 }]] },
-    "Read Decision": { "main": [[{ "node": "Approved?", "type": "main", "index": 0 }]] },
+    "Parse Response": {
+      "main": [
+        [
+          {
+            "node": "Confidence Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Prompt": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Parse Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Job to DB": {
+      "main": [
+        [
+          {
+            "node": "Build Telegram Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Telegram Payload": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Correction": {
+      "main": [
+        [
+          {
+            "node": "Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a text message": {
+      "main": [
+        [
+          {
+            "node": "Wait for Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Decision": {
+      "main": [
+        [
+          {
+            "node": "Log Correction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confidence Gate": {
+      "main": [
+        [
+          {
+            "node": "Send Direct",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Save Job to DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Review": {
+      "main": [
+        [
+          {
+            "node": "Read Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Approved?": {
       "main": [
-        [{ "node": "Send Approved Email", "type": "main", "index": 0 }],
-        []
+        [
+          {
+            "node": "Send Approved Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
   "active": false,
-  "settings": { "executionOrder": "v1" },
-  "meta": { "instanceId": "REPLACE_WITH_YOUR_N8N_INSTANCE_ID" }
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "f716fdc3-1fbf-4f49-ad4b-4b8f7990801a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "7c83509977da1e0c75864842746faf5caa5321ad95b28f0723d857949f60f0a6"
+  },
+  "id": "_Y0BZWaZd65lLyjQRSOWO",
+  "tags": []
 }

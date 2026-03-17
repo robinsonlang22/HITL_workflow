@@ -1,10 +1,6 @@
+# 🔮 AI Customer Support HITL Pipeline
 
-## 🔮 Email automatic answer
-The next evolution of this platform focuses on high-stakes commercial compliance by implementing Human-in-the-Loop (HITL) and Reinforcement Learning from Human Feedback (RLHF). This phase demonstrates how to constrain Large Language Models (LLMs) to ensure output quality, mitigate hallucinations, and maintain professional rigor.
-
-# AI Customer Support HITL Pipeline 🤖✉️
-
-An automated, Human-in-the-Loop (HITL) email processing pipeline built with n8n. This workflow leverages Google Gemini to analyze incoming customer emails, draft context-aware responses, and calculate a confidence score. High-risk or low-confidence drafts are routed to a human operator via Telegram for review before being dispatched.
+An automated, Human-in-the-Loop (HITL) email processing pipeline built with n8n. This workflow leverages Google Gemini to analyze incoming customer emails, draft context-aware responses, and calculate a confidence score. High-risk or low-confidence drafts are routed to a human operator via Telegram for review before being dispatched. These drafts store in database for potential Reinforcement Learning from Human Feedback (RLHF) in the future. This workflow demonstrates how to constrain Large Language Models (LLMs) to ensure output quality, mitigate hallucinations, and maintain professional rigor.
 
 ## 🌟 Key Features
 
@@ -27,17 +23,17 @@ To run this workflow, you need:
 *   A PostgreSQL database.
 *   Google Cloud Console project with Gmail API enabled (OAuth2 credentials).
 *   Google Gemini API Key.
-*   A Telegram Bot Token and your personal/group Chat ID.
+*   A Telegram Bot Token and your Chat ID.
 
 ## 🚀 Setup Instructions
 
 1.  **Clone the Repository:**
     ```bash
-    git clone [https://github.com/yourusername/ai-email-hitl-pipeline.git](https://github.com/yourusername/ai-email-hitl-pipeline.git)
+    git clone https://github.com/robinsonlang22/HITL_workflow.git
     ```
 2.  **Import Workflow:**
     *   Open your n8n UI.
-    *   Click **Import from File** and select `Email_HITL_Pipeline.json`.
+    *   Click **Import from File** and select `email_hitl.json`.
 3.  **Configure Credentials:**
     *   Connect your Gmail account via OAuth2.
     *   Set up your PostgreSQL connection.

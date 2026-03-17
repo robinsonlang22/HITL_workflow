@@ -3,4 +3,3 @@ node_modules/
 .next/
 *.jsonl
 db_configuration.md
-CLAUDE.md

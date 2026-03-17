@@ -11,7 +11,7 @@ An automated, Human-in-the-Loop (HITL) email processing workflow built with n8n.
 
 ## 🏗️ Architecture & Tech Stack
 
-*   **Orchestration:** [self-hosed n8n on GCP VM](https://github.com/robinsonlang22/n8n_project)
+*   **Orchestration:** [self-hosed n8n on GCP VM](https://github.com/robinsonlang22/Self_hosted_n8n)
 *   **LLM:** Google Gemini API (Prompt Engineering & JSON structured output)
 *   **Database:** PostgreSQL (Storing jobs and operator corrections)
 *   **Communication:** Gmail API (Trigger & Send), Telegram Bot API (Operator Alerts)

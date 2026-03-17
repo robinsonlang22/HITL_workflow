@@ -53,7 +53,7 @@ To run this workflow, you need:
     *   `Confidence < 0.75`: Halts execution and sends a webhook-backed approval card to Telegram.
 4.  **Resolution:** Operator clicks Approve/Reject, workflow resumes, updates the DB, and dispatches the final email.
 
-## 🛠️ Discussion and potential new features in future
+## 🛠️ Discussion & Potential features
 Instead of allowing autonomous agents to operate without oversight, this workflow enforces a multi-stage validation process for customer-facing content (Emails, Support Tickets, Quotes).
 
 1. Constrained Generation: AI agents are grounded in specific corporate "Brand Voice" documents. The model can fed by real-time product specifications and technical constraints to prevent factual errors. By using Retrieval-Augmented Generation (RAG) combined with strict system prompts, the model is restricted from making unauthorized promises, nventing product capabilities or reducing hallucination.

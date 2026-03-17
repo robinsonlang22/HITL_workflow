@@ -319,20 +319,6 @@
         1184,
         496
       ]
-    },
-    {
-      "parameters": {
-        "mode": "raw",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
-      "position": [
-        0,
-        0
-      ],
-      "id": "d2d56609-1467-4e94-81ce-eae7070f9f94",
-      "name": "Edit Fields"
     }
   ],
   "pinData": {},
@@ -484,7 +470,7 @@
     "timeSavedMode": "fixed",
     "callerPolicy": "workflowsFromSameOwner"
   },
-  "versionId": "02cfa3ac-74f2-4cb2-ab95-091ce620e528",
+  "versionId": "48cb3736-0e77-4294-a157-6e1128311c7b",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "7c83509977da1e0c75864842746faf5caa5321ad95b28f0723d857949f60f0a6"

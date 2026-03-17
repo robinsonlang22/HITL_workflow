@@ -1,6 +1,6 @@
-# 🔮 AI Customer Support HITL Pipeline
+# 🔮 AI Customer Support HITL Workflow
 
-An automated, Human-in-the-Loop (HITL) email processing pipeline built with n8n. This workflow leverages Google Gemini to analyze incoming customer emails, draft context-aware responses, and calculate a confidence score. High-risk or low-confidence drafts are routed to a human operator via Telegram for review before being dispatched. These drafts store in database for potential Reinforcement Learning from Human Feedback (RLHF) in the future. This workflow demonstrates how to constrain Large Language Models (LLMs) to ensure output quality, mitigate hallucinations, and maintain professional rigor.
+An automated, Human-in-the-Loop (HITL) email processing workflow built with n8n. This workflow leverages Google Gemini to analyze incoming customer emails, draft context-aware responses, and calculate a confidence score. High-risk or low-confidence drafts are routed to a human operator via Telegram for review before being dispatched. These drafts store in database for potential Reinforcement Learning from Human Feedback (RLHF) in the future. This workflow demonstrates how to constrain Large Language Models (LLMs) to ensure output quality, mitigate hallucinations, and maintain professional rigor.
 
 ## 🌟 Key Features
 
